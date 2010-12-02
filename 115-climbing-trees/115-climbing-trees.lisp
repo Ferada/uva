@@ -1,5 +1,10 @@
 (in-package #:cl-user)
 
+;; NOTE: the input-2 file is wrong in the sense that the query "ee ee" is
+;; not valid, since no there is arguably no path from one person to itself.
+;; the best output would imho be sibling, but i simply return "same" here
+;; and raise a warning to be sure it is noticed.
+
 ;; TODO: maybe compile it via ecl?
 
 (dolist (system '(#:iterate))
@@ -130,27 +135,33 @@ SYMBOL or LIST describing it.  See also PRINT-RELATIONSHIP."
 	(no-relation "no relation")
 	(same (prog1 "same" (warn "~A is no valid relation" relation))))))
 
-(defun solve (&optional (input #P"115-input-1.txt") (output #P"115-output-1.txt"))
+(defun solve (&optional (input #P"115-input-1.txt") (stream *standard-output*))
   (setf *graph* NIL)
   (clrhash *translation*)
   (with-open-file (*standard-input* input)
-    (with-open-file (output output)
-      (iterate
-	(with mode = 'input)
-	(for line = (read-line *standard-input* NIL NIL))
-	(while line)
-	(when (= (length line) 0)
-	  (next-iteration))
-	(for (values child offset) = (read-from-string line))
-	(for father = (read-from-string line T NIL :start offset))
-	;; mode switch between insertion and query
-	(when (eq child 'no.child)
-	  (setf mode 'query)
-	  (next-iteration))
-	(if (eq mode 'input)
-	    (insert-relation child father)
-	    (let* ((solution (format NIL "~A" (print-relationship (compute-relationship child father))))
-		   (correct (read-line output)))
-	      (if (string= solution correct)
-		  (format T "~A~%" solution)
-		  (format T "~A != ~A, wrong solution~%" solution correct))))))))
+    (iterate
+      (with mode = 'input)
+      (for line = (read-line *standard-input* NIL NIL))
+      (while line)
+      (when (= (length line) 0)
+	(next-iteration))
+      (for (values child offset) = (read-from-string line))
+      (for father = (read-from-string line T NIL :start offset))
+      ;; mode switch between insertion and query
+      (when (eq child 'no.child)
+	(setf mode 'query)
+	(next-iteration))
+      (if (eq mode 'input)
+	  (insert-relation child father)
+	  (format stream "~A~%" (print-relationship (compute-relationship child father)))))))
+
+(defun compare-solution (&optional (input #P"115-input-1.txt") (output #P"115-output-1.txt"))
+  "Compares solution and (hopefully) correct output line by line."
+  (let ((stream (make-string-output-stream)))
+    (time (solve input stream))
+    (iterate
+      (for solution in-stream (make-string-input-stream (get-output-stream-string stream)) using #'read-line)
+      (for correct in-file output using #'read-line)
+      (if (string= solution correct)
+	  (format T "~A~%" solution)
+	  (format T "~A != ~A, wrong solution~%" solution correct)))))
